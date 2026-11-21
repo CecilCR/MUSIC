@@ -125,7 +125,24 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
 .disc{opacity:calc(.6 + var(--bass,0)*.3)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);z-index:50;max-width:90vw;padding:10px 16px;border-radius:12px;background:rgba(20,18,32,.92);border:1px solid rgba(255,255,255,.2);color:var(--tx);font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-@media(prefers-reduced-motion:reduce){.disc,.vinyl,.eq i,.mb i{animation:none}.arm{transition:none}.playing .play{animation:none}}
+
+/* -------- Panel EQ (Corregido) -------- */
+.chipwrap{position:relative}
+.eqpanel{position:absolute;right:0;bottom:calc(100% + 12px);width:250px;padding:16px;border-radius:18px;background:rgba(20,18,32,.96);border:1px solid rgba(255,255,255,.18);box-shadow:0 18px 48px rgba(0,0,0,.65);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);display:none;z-index:100}
+.eqpanel.open{display:block;animation:eqp .22s ease-out}
+@keyframes eqp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.eqpanel h4{font-size:11px;letter-spacing:.22em;color:var(--mu);font-weight:600;margin-bottom:12px;text-transform:uppercase}
+.eqpanel .presets{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.eqpanel .presets button{flex:1;min-width:0;padding:7px 6px;border-radius:10px;font-size:11px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:var(--mu);transition:all .18s}
+.eqpanel .presets button:hover{background:rgba(255,255,255,.12)}
+.eqpanel .presets button.on{color:var(--tx);border-color:var(--a2);background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 30%,transparent),color-mix(in srgb,var(--a3) 30%,transparent));font-weight:600}
+.eqpanel .band{display:grid;grid-template-columns:36px 1fr 38px;align-items:center;gap:10px;margin:10px 0}
+.eqpanel .band label{font-size:11px;color:var(--mu);letter-spacing:.04em}
+.eqpanel .band output{font:10px ui-monospace,Menlo,monospace;color:var(--mu);text-align:right}
+.eqpanel .band input[type=range]{height:4px}
+.eqpanel .hint{font-size:10px;color:var(--mu);opacity:.75;margin-top:10px;line-height:1.4}
+
+@media(prefers-reduced-motion:reduce){.disc,.vinyl,.eq i,.mb i{animation:none}.arm{transition:none}.playing .play{animation:none}.eqpanel.open{animation:none}}
 </style>
 </head>
 <body>
@@ -154,9 +171,19 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
     <button class="ib like" id="bLike" aria-label="Me gusta"><svg viewBox="0 0 24 24"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.800-8 11-8 11z"/></svg></button>
   </section>
   <section class="vol"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM16 9a4 4 0 0 1 0 6"/></svg><input type="range" id="vol" min="0" max="100" value="70" aria-label="Volumen"><output id="vo">70</output></section>
-  <div class="tools"><input type="search" id="q" placeholder="Buscar título, artista o álbum" aria-label="Buscar"><button class="chip" id="bQc" title="Vaciar la cola" hidden>▸ 0 ✕</button><button class="chip" id="bLk" title="Solo canciones con me gusta">♥</button><button class="chip" id="bSp" title="Velocidad de reproducción">1×</button><button class="chip" id="bSl" title="Temporizador de apagado">☾</button></div>
+  <div class="tools">
+    <input type="search" id="q" placeholder="Buscar título, artista o álbum" aria-label="Buscar">
+    <button class="chip" id="bQc" title="Vaciar la cola" hidden>▸ 0 ✕</button>
+    <button class="chip" id="bLk" title="Solo canciones con me gusta">♥</button>
+    <button class="chip" id="bSp" title="Velocidad de reproducción">1×</button>
+    <div class="chipwrap">
+      <button class="chip" id="bEq" title="Ecualizador">EQ</button>
+      <div class="eqpanel" id="eqPanel" role="dialog" aria-label="Ecualizador"></div>
+    </div>
+    <button class="chip" id="bSl" title="Temporizador de apagado">☾</button>
+  </div>
   <div class="list" id="list"></div>
-  <div class="ver">v8</div>
+  <div class="ver">v10</div>
 </main>
 <input type="file" id="fFiles" accept="audio/*,.mp3,.m4a,.m4b,.flac,.ogg,.oga,.wav,.aac,.opus,.weba,.aiff,.aif,.wma,.mp4" multiple hidden>
 <input type="file" id="fFolder" webkitdirectory multiple hidden>
@@ -166,9 +193,22 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
 const $=s=>document.querySelector(s),root=document.documentElement,pl=$('#pl');
 const au=new Audio();au.volume=.7;au.preload='metadata';
 let T=[],cur=-1,shuf=false,drag=false,likes={},raf=0,want=false,errRun=0;
-let S={},resumeAt=0,lastSave=0,ctx=null,an=null,buf=null,msrc=null,quiet=0;
+let S={},resumeAt=0,lastSave=0,ctx=null,an=null,buf=null,quiet=0;
 let rep=0,queue=[],spd=[1,1.25,1.5,2,.75],si=0,slT=0,sl=[0,15,30,60],sli=0,onlyLk=false;
 let toastT=0;
+
+/* -------- Audio graph -------- */
+let srcNode=null,eqBass=null,eqMid=null,eqTreb=null,masterGain=null;
+let graphMode='none'; // 'element' | 'capture' | 'none'
+let eqEnabled=false;
+const EQ_PRESETS={
+  flat:    {bass:0, mid:0, treb:0, label:'Plano'},
+  warm:    {bass:4, mid:0, treb:-1, label:'Cálido'},
+  bright:  {bass:1, mid:1, treb:4, label:'Brillante'}
+};
+let eqState={bass:0,mid:0,treb:0};
+try{const raw=localStorage.getItem('lumen-eq');if(raw){const o=JSON.parse(raw);if(o&&typeof o==='object'){eqState={bass:+o.bass||0,mid:+o.mid||0,treb:+o.treb||0};eqEnabled=!!o.on}}}catch(e){}
+function saveEQ(){try{localStorage.setItem('lumen-eq',JSON.stringify({on:eqEnabled,bass:eqState.bass,mid:eqState.mid,treb:eqState.treb}))}catch(e){}}
 
 try{const raw=localStorage.getItem('lumen-likes');if(raw)likes=JSON.parse(raw)||{}}catch(e){likes={}}
 const fmt=s=>{if(!isFinite(s))return'0:00';s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
@@ -209,6 +249,146 @@ function saveLikes(){
     const payload=JSON.stringify(likes);
     if(payload.length<LIMIT_LIKES)localStorage.setItem('lumen-likes',payload);
   }catch(e){}
+}
+
+/* ---------- Audio graph: crear/mantener ---------- */
+function ensureCtx(){
+  if(ctx)return ctx;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return null;
+    ctx=new AC({latencyHint:'playback'});
+    an=ctx.createAnalyser();an.fftSize=256;an.smoothingTimeConstant=.8;
+    buf=new Uint8Array(an.frequencyBinCount);
+  }catch(e){ctx=null}
+  return ctx;
+}
+function buildEqGraph(){
+  if(!ctx)return false;
+  if(srcNode)return true;
+  try{
+    srcNode=ctx.createMediaElementSource(au);
+    eqBass=ctx.createBiquadFilter();eqBass.type='lowshelf';eqBass.frequency.value=200;
+    eqMid=ctx.createBiquadFilter();eqMid.type='peaking';eqMid.frequency.value=1000;eqMid.Q.value=1;
+    eqTreb=ctx.createBiquadFilter();eqTreb.type='highshelf';eqTreb.frequency.value=6000;
+    masterGain=ctx.createGain();masterGain.gain.value=1;
+    srcNode.connect(eqBass);eqBass.connect(eqMid);eqMid.connect(eqTreb);
+    eqTreb.connect(masterGain);masterGain.connect(an);masterGain.connect(ctx.destination);
+    applyEQToNodes();
+    graphMode='element';
+    return true;
+  }catch(e){
+    try{if(srcNode)srcNode.disconnect()}catch(x){}
+    srcNode=eqBass=eqMid=eqTreb=masterGain=null;
+    return false;
+  }
+}
+function applyEQToNodes(){
+  if(!eqBass)return;
+  const b=eqEnabled?eqState.bass:0;
+  const m=eqEnabled?eqState.mid:0;
+  const t=eqEnabled?eqState.treb:0;
+  try{eqBass.gain.value=b;eqMid.gain.value=m;eqTreb.gain.value=t}catch(e){}
+}
+function hook(){
+  if(!ensureCtx())return;
+  if(ctx.state==='suspended')ctx.resume().catch(()=>{});
+  if(graphMode==='element'){
+    applyEQToNodes();
+    return;
+  }
+  if(buildEqGraph())return;
+  try{
+    const st=au.captureStream?au.captureStream():au.mozCaptureStream?au.mozCaptureStream():null;
+    if(!st||!st.getAudioTracks().length)return;
+    if(!an)return;
+    const msrc=ctx.createMediaStreamSource(st);
+    msrc.connect(an);
+    graphMode='capture';
+  }catch(e){}
+}
+function setEqEnabled(v){
+  eqEnabled=v;
+  $('#bEq').classList.toggle('on',v);
+  const p=$('#eqPanel');
+  if(p)p.querySelectorAll('.presets button').forEach(b=>b.classList.toggle('on',v&&b.dataset.preset===currentPresetName()));
+  applyEQToNodes();
+  saveEQ();
+}
+function currentPresetName(){
+  for(const k in EQ_PRESETS){
+    const p=EQ_PRESETS[k];
+    if(p.bass===eqState.bass&&p.mid===eqState.mid&&p.treb===eqState.treb)return k;
+  }
+  return 'custom';
+}
+
+/* ---------- Panel EQ ---------- */
+function buildEqPanel(){
+  const p=$('#eqPanel');
+  if(!p)return;
+  while(p.firstChild)p.removeChild(p.firstChild);
+  const h=document.createElement('h4');h.textContent='Ecualizador';p.appendChild(h);
+  const pr=document.createElement('div');pr.className='presets';
+  const cur=currentPresetName();
+  ['flat','warm','bright'].forEach(k=>{
+    const b=document.createElement('button');
+    b.dataset.preset=k;b.textContent=EQ_PRESETS[k].label;
+    if(eqEnabled&&cur===k)b.classList.add('on');
+    b.onclick=()=>{
+      const pr2=EQ_PRESETS[k];
+      eqState={bass:pr2.bass,mid:pr2.mid,treb:pr2.treb};
+      setEqEnabled(true);
+      syncPanelSliders();
+      p.querySelectorAll('.presets button').forEach(x=>x.classList.toggle('on',x.dataset.preset===k));
+    };
+    pr.appendChild(b);
+  });
+  p.appendChild(pr);
+
+  const makeBand=(key,label,min,max)=>{
+    const row=document.createElement('div');row.className='band';
+    const lb=document.createElement('label');lb.textContent=label;
+    const inp=document.createElement('input');
+    inp.type='range';inp.min=String(min);inp.max=String(max);inp.step='1';
+    inp.value=String(eqState[key]);
+    inp.dataset.band=key;
+    const out=document.createElement('output');out.textContent=(eqState[key]>0?'+':'')+eqState[key]+' dB';
+    inp.oninput=()=>{
+      const v=Math.max(min,Math.min(max,+inp.value||0));
+      eqState[key]=v;
+      out.textContent=(v>0?'+':'')+v+' dB';
+      if(!eqEnabled)setEqEnabled(true);
+      applyEQToNodes();
+      saveEQ();
+      p.querySelectorAll('.presets button').forEach(x=>x.classList.toggle('on',x.dataset.preset===currentPresetName()));
+    };
+    row.appendChild(lb);row.appendChild(inp);row.appendChild(out);
+    p.appendChild(row);
+  };
+  makeBand('bass','Graves',-10,10);
+  makeBand('mid','Medios',-10,10);
+  makeBand('treb','Agudos',-10,10);
+
+  const hint=document.createElement('div');hint.className='hint';
+  hint.textContent='Ajustes suaves recomendados: ±4 dB. Si el navegador no soporta procesado, el EQ queda inactivo y la reproducción sigue normal.';
+  p.appendChild(hint);
+}
+function syncPanelSliders(){
+  const p=$('#eqPanel');
+  if(!p)return;
+  p.querySelectorAll('input[type=range]').forEach(inp=>{
+    const k=inp.dataset.band;
+    if(!k)return;
+    inp.value=String(eqState[k]);
+    const out=inp.parentElement.querySelector('output');
+    if(out)out.textContent=(eqState[k]>0?'+':'')+eqState[k]+' dB';
+  });
+}
+function toggleEqPanel(){
+  const p=$('#eqPanel');
+  if(!p)return;
+  p.classList.toggle('open');
 }
 
 /* ---------- UI base ---------- */
@@ -256,17 +436,6 @@ function txt(b){
   else if(e===1)l=(r[0]===254&&r[1]===255)?'utf-16be':'utf-16le';
   else if(e===2)l='utf-16be';
   try{return new TextDecoder(l).decode(r).split(String.fromCharCode(0))[0].trim()}catch(x){return''}
-}
-function apic(b){
-  if(!b||b.length<4)return null;
-  const e=b[0];let p=1;
-  while(p<b.length&&b[p])p++;
-  const mime=String.fromCharCode(...b.subarray(1,p));
-  p+=2;
-  if(e===1||e===2){while(p<b.length&&!(b[p]===0&&b[p+1]===0))p+=2;p+=2}
-  else{while(p<b.length&&b[p])p++;p++}
-  if(p>=b.length)return null;
-  return new Blob([b.subarray(p)],{type:mime.startsWith('image/')?mime:'image/jpeg'});
 }
 function parseID3(d,ver){
   let p=0;const o={};let pic=null;
@@ -486,23 +655,7 @@ async function meta(i0){
   await Promise.all(Array.from({length:Math.min(CONC,list.length||1)},worker));
 }
 
-/* ---------- Ecualizador real ---------- */
-function hook(){
-  try{
-    if(!ctx){
-      const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC)return;
-      ctx=new AC();an=ctx.createAnalyser();an.fftSize=256;an.smoothingTimeConstant=.8;
-      buf=new Uint8Array(an.frequencyBinCount);
-    }
-    if(ctx.state==='suspended')ctx.resume().catch(()=>{});
-    const st=au.captureStream?au.captureStream():au.mozCaptureStream?au.mozCaptureStream():null;
-    if(!st||!st.getAudioTracks().length)return;
-    if(msrc){try{msrc.disconnect()}catch(e){}}
-    msrc=ctx.createMediaStreamSource(st);
-    msrc.connect(an);
-  }catch(e){}
-}
+/* ---------- Visualizador ---------- */
 function vis(){
   if(!an||RM.matches)return;
   an.getByteFrequencyData(buf);
@@ -814,6 +967,18 @@ $('#bLike').onclick=e=>{
     }
   }
 };
+
+/* ---------- EQ: controlador ---------- */
+$('#bEq').onclick=()=>{toggleEqPanel()};
+document.addEventListener('click',e=>{
+  const p=$('#eqPanel');
+  if(!p||!p.classList.contains('open'))return;
+  const wrap=e.target.closest('.chipwrap');
+  if(wrap)return;
+  p.classList.remove('open');
+});
+buildEqPanel();
+$('#bEq').classList.toggle('on',eqEnabled);
 
 const v=$('#vol');
 v.oninput=()=>{
